@@ -20,6 +20,7 @@
 		1867EBD91DCC392400EF0E2F /* HttpTransaction+Operation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1867EBD81DCC392400EF0E2F /* HttpTransaction+Operation.swift */; };
 		1882B0DD1DE33281008BE621 /* HttpNetworking+DELETE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1882B0DC1DE33281008BE621 /* HttpNetworking+DELETE.swift */; };
 		18CFA1281D8EA07D00569F8F /* ReactiveCocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 18CFA1271D8EA07D00569F8F /* ReactiveCocoa.framework */; };
+		8BC28AA89AA855BE641440BA /* Pods_Networking.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7262D8C887545E587D55C083 /* Pods_Networking.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +51,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				18CFA1281D8EA07D00569F8F /* ReactiveCocoa.framework in Frameworks */,
+				8BC28AA89AA855BE641440BA /* Pods_Networking.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
