@@ -32,10 +32,10 @@ var HttpTransaction_Download_ResumeData: UInt8 = 0
 
 extension HttpTransaction {
     
-    var resumeData: NSData? {
+    var resumeData: Data? {
         get {
             return objc_getAssociatedObject(self,
-                                            &HttpTransaction_Download_ResumeData) as? NSData
+                                            &HttpTransaction_Download_ResumeData) as? Data
         }
         set {
             objc_setAssociatedObject(self,
@@ -50,23 +50,25 @@ extension HttpTransaction {
     }
     
     public func resumeDownload() {
-        HttpNetworking.sharedInstance
-            .rac_signalDownloadResume(self)
-            .subscribeNext({ [weak self](a: AnyObject!) in
+        let _ = HttpNetworking.sharedInstance
+            .sendingDownloadResume(transaction: self)
+            .subscribe(onNext: { [weak self](resp) in
                 guard let strongSelf = self else {
                     return
                 }
-                strongSelf.rac_subscriber?.sendNext(a)
-                }, error: { [weak self](error: NSError!) in
+                strongSelf.rxObserver?.onNext(resp)
+                }, onError: { [weak self](error) in
                     guard let strongSelf = self else {
                         return
                     }
-                    strongSelf.rac_subscriber?.sendError(error)
-            }) { [weak self] in
-                guard let strongSelf = self else {
-                    return
-                }
-                strongSelf.rac_subscriber?.sendCompleted()
+                    strongSelf.rxObserver?.onError(error)
+                }, onCompleted: { [weak self] in
+                    guard let strongSelf = self else {
+                        return
+                    }
+                    strongSelf.rxObserver?.onCompleted()
+            }) {
+                // Dispose
         }
     }
     

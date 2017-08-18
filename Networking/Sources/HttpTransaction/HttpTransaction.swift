@@ -7,9 +7,9 @@
 //
 
 import Foundation
-import ReactiveCocoa
-import CocoaLumberjack
+import RxSwift
 import Alamofire
+import CocoaLumberjack
 
 public enum HttpMethodType: String {
     case DELETE         = "DELETE"          // DELETE
@@ -37,66 +37,66 @@ public protocol HttpTransactionAuthorizationProtocol: NSObjectProtocol {
 // MARK:- HttpTransactionDownloadProtocol
 public protocol HttpTransactionDownloadProtocol: NSObjectProtocol {
     
-    func outputFilePath() -> NSURL
+    func outputFilePath() -> URL
     
 }
 
 // MARK:- HttpTransaction
-public class HttpTransaction: NSObject {
+open class HttpTransaction: NSObject {
     
     class RequestBean: NSObject {
         weak var request: Request?
         var isCancelled: Bool = false
     }
     var currentRequest: RequestBean?
-    var rac_subscriber: RACSubscriber?
+    var rxObserver: AnyObserver<Any>?
     
     deinit {
         DDLogInfo("deinit in \(self)")
     }
     
 // MARK: Progress
-    public var progress: ((Int64, Int64, Int64) -> Void)?
+    open var onProgress: ((_ p: Progress) -> Void)?
     
 // MARK: Cache
-    public var needLoadFromCache:Bool = false
-    public var needLoadFromCacheIfFailed:Bool = false
-    public var needCacheReponse:Bool = false
+    open var needLoadFromCache:Bool = false
+    open var needLoadFromCacheIfFailed:Bool = false
+    open var needCacheReponse:Bool = false
     
-    public func cacheObject() -> HttpResponseCache? {
+    open func cacheObject() -> HttpResponseCache? {
         return nil
     }
     
-    public func toURLRequest() -> NSURLRequest {
-        let url = NSURL.init(string: self.url().urlEncoding())
-        let mURLRequest = NSMutableURLRequest.init(URL: url!,
-                                                   cachePolicy: .UseProtocolCachePolicy,
+    open func toURLRequest() -> URLRequest {
+        let url = URL.init(string: self.url().urlEncoding())
+        let mURLRequest = NSMutableURLRequest.init(url: url!,
+                                                   cachePolicy: .useProtocolCachePolicy,
                                                    timeoutInterval: self.timeoutInterval())
         switch self.httpType() {
         case .DELETE:
-            mURLRequest.HTTPMethod = Alamofire.Method.DELETE.rawValue
+            mURLRequest.httpMethod = Alamofire.HTTPMethod.delete.rawValue
             break
         case .GET, .GET_STREAM, .DOWNLOAD:
-            mURLRequest.HTTPMethod = Alamofire.Method.GET.rawValue
+            mURLRequest.httpMethod = Alamofire.HTTPMethod.get.rawValue
             break
         case .PUT:
-            mURLRequest.HTTPMethod = Alamofire.Method.PUT.rawValue
+            mURLRequest.httpMethod = Alamofire.HTTPMethod.put.rawValue
             break
         case .POST, .POST_BODY, .POST_FORM:
-            mURLRequest.HTTPMethod = Alamofire.Method.POST.rawValue
+            mURLRequest.httpMethod = Alamofire.HTTPMethod.post.rawValue
             break
         }
         mURLRequest.allHTTPHeaderFields = self.requestHeaders()
         if self.httpType() == .POST_BODY {
-            mURLRequest.HTTPBody = self.httpData()
+            mURLRequest.httpBody = self.httpData()
         }
-        return mURLRequest
+        return mURLRequest as URLRequest
     }
     
 // MARK:- Override
-    public func url() -> String {
+    open func url() -> String {
         var uri = self.baseServerUrl() + self.subUri()
-        if uri.containsString("?") {
+        if uri.contains("?") {
             uri = uri + "&"
         } else {
             uri = uri + "?"
@@ -105,87 +105,85 @@ public class HttpTransaction: NSObject {
         return uri
     }
 
-    public func baseServerUrl() -> String {
+    open func baseServerUrl() -> String {
         DDLogError("Must override >>baseServerUrl<< in subclass of HttpTransaction")
         self.doesNotRecognizeSelector(#function)
         return ""
     }
     
-    public func subUri() -> String {
+    open func subUri() -> String {
         DDLogError("Must override >>subUri<< in subclass of HttpTransaction")
         self.doesNotRecognizeSelector(#function)
         return ""
     }
     
-    public func httpType() -> HttpMethodType {
+    open func httpType() -> HttpMethodType {
         DDLogError("Must override >>httpType<< in subclass of HttpTransaction")
         self.doesNotRecognizeSelector(#function)
         return HttpMethodType.POST
     }
     
-    public func timeoutInterval() -> NSTimeInterval {
+    open func timeoutInterval() -> TimeInterval {
         return 60
     }
     
-    public func toDictionary() -> [String: String] {
+    open func toDictionary() -> [String: String] {
         return [:]
     }
     
-    public func requestHeaders() -> [String: String] {
+    open func requestHeaders() -> [String: String] {
         return ["Content-Type": "application/json;charset=UTF-8"]
     }
     
-    public func httpMultipartFormName() -> String {
+    open func httpMultipartFormName() -> String {
         return ""
     }
     
-    public func httpMultipartFormFileName() -> String {
+    open func httpMultipartFormFileName() -> String {
         return ""
     }
     
-    public func httpMultipartFormMimeType() -> String {
+    open func httpMultipartFormMimeType() -> String {
         return ""
     }
     
-    public func httpData() -> NSData? {
+    open func httpData() -> Data? {
         return nil
     }
     
-    public func excludeParameters() -> [String] {
-        return []
+    open func excludeParameters() -> [String] {
+        return ["needLoadFromCacheIfFailed",
+                "needCacheReponse",
+                "needLoadFromCache",
+                "onProgress",
+                "currentRequest",
+                "rxObserver"]
     }
     
-    public func send() -> RACSignal {
-        var signal: RACSignal
+    open func send() -> Observable<Any> {
+        var signal: Observable<Any>
         
         let networking = HttpNetworking.sharedInstance
-        
         switch self.httpType() {
-        case .GET:
-            signal = networking.rac_signalGET(self)
+        case .GET, .POST, .PUT, .DELETE:
+            signal = networking.sendOut(commonTransaction: self)
         case .GET_STREAM:
-            signal = networking.rac_signalGETStream(self)
-        case .POST:
-            signal = networking.rac_signalPOST(self)
+            signal = networking.sendingGetStream(transaction: self)
         case .POST_FORM:
-            signal = networking.rac_signalPOSTForm(self)
+            signal = networking.sendingPostForm(transaction: self)
         case .POST_BODY:
-            signal = networking.rac_signalPOSTBody(self)
-        case .PUT:
-            signal = networking.rac_signalPUT(self)
+            signal = networking.sendingPostBody(transaction: self)
         case .DOWNLOAD:
-            signal = networking.rac_signalDownload(self)
-        case .DELETE:
-            signal = networking.rac_signalDELETE(self)
+            signal = networking.sendingDownload(transaction: self)
         }
         return signal
     }
     
-    public func onResponse(response : AnyObject) -> AnyObject? {
+    open func onResponse(response : AnyObject) -> AnyObject? {
         return nil
     }
     
-    public func onStream(data: NSData) -> AnyObject? {
+    open func onStream(data: Data) -> AnyObject? {
         return nil
     }
     

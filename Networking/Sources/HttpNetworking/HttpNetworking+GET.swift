@@ -7,92 +7,49 @@
 //
 
 import Foundation
-import ReactiveCocoa
-import CocoaLumberjack
+import RxSwift
 import Alamofire
+import CocoaLumberjack
 
+/**
+ *
+ * 实现Http Get 请求
+ *
+ */
 extension HttpNetworking {
     
-    // MARK:- GET
-    func rac_signalGET(transaction : HttpTransaction) -> RACSignal {
-        
-        return RACSignal.createSignal { (subscriber :RACSubscriber!) -> RACDisposable! in
-            self.processRequest(transaction,
-                subscriber: subscriber,
-                sendingBlock: { [weak self] in
-                    guard let strongSelf = self else {
-                        return
-                    }
-                    strongSelf.logTransactionSending(transaction)
+    /**
+     Implement download file when use HTTP GET method
+     */
+    func sendingGetStream(transaction : HttpTransaction) -> Observable<Any> {
+        return Observable.create({ [weak self](observer) -> Disposable in
+            guard let strongSelf = self else {
+                return Disposables.create()
+            }
+            strongSelf.process(transaction: transaction,
+                               observer: observer,
+                               sendingBlock:
+                {
+                    strongSelf.logSending(transaction: transaction)
                     let requestBean = HttpTransaction.RequestBean()
                     transaction.currentRequest = requestBean
-                    
-                    requestBean.request = Alamofire.request(transaction.toURLRequest()).responseJSON { [weak self](resp) in
-                        guard let strongSelf = self else {
-                            return
-                        }
-                        if let error = resp.result.error {
-                            strongSelf.logTransactionError(transaction,
-                                error: error,
-                                resp: resp.response)
-                            if transaction.needLoadFromCacheIfFailed {
-                                strongSelf.loadCacheForTransaction(transaction, subscriber: subscriber)
-                            } else {
-                                subscriber.sendError(error)
-                            }
-                        } else if let value = resp.result.value {
-                            strongSelf.logTransactionResponse(transaction, responseString: value.description)
-                            strongSelf.alreadyReceivedResponse(value,
-                                transaction: transaction,
-                                subscriber: subscriber)
-                        }
+                    requestBean.request = Alamofire.request(transaction.toURLRequest())
+                        .responseJSON { (resp) in
+                            strongSelf.process(response: resp,
+                                               transaction: transaction,
+                                               observer: observer)
                     }
-                })
-            return RACDisposable()
-        }
-    }
-    
-    func rac_signalGETStream(transaction : HttpTransaction) -> RACSignal {
-        
-        return RACSignal.createSignal { (subscriber :RACSubscriber!) -> RACDisposable! in
-            self.processRequest(transaction,
-                subscriber: subscriber,
-                sendingBlock: { [weak self] in
-                    guard let strongSelf = self else {
-                        return
+                    if let dataRequest = transaction.currentRequest?.request as? DataRequest {
+                        dataRequest.stream(closure: { (data) in
+                            let string = String(data: data, encoding: String.Encoding.utf8)
+                            DDLogDebug(string!)
+                            _ = transaction.onStream(data: data)
+                        })
                     }
-                    strongSelf.logTransactionSending(transaction)
-                    let requestBean = HttpTransaction.RequestBean()
-                    transaction.currentRequest = requestBean
-                    
-                    requestBean.request = Alamofire.request(transaction.toURLRequest()).responseJSON { [weak self](resp) in
-                            guard let strongSelf = self else {
-                                return
-                            }
-                        if let error = resp.result.error {
-                            strongSelf.logTransactionError(transaction,
-                                error: error,
-                                resp: resp.response)
-                            if transaction.needLoadFromCacheIfFailed {
-                                strongSelf.loadCacheForTransaction(transaction, subscriber: subscriber)
-                            } else {
-                                subscriber.sendError(error)
-                            }
-                        } else if let value = resp.result.value {
-                            strongSelf.logTransactionResponse(transaction, responseString: value.description)
-                            strongSelf.alreadyReceivedResponse(value,
-                                transaction: transaction,
-                                subscriber: subscriber)
-                        }
-                    }
-                    transaction.currentRequest?.request?.stream({ (data: NSData) in
-                        let string = String(data: data, encoding: NSUTF8StringEncoding)
-                        DDLogDebug(string!)
-                        transaction.onStream(data)
-                    })
-                })
-            return RACDisposable()
-        }
+            })
+            return Disposables.create()
+        })
     }
     
 }
+

@@ -11,40 +11,68 @@ import Foundation
 extension HttpTransaction {
     
     public func toParameters() -> [String: AnyObject] {
-        var dic:[String: AnyObject] = [:]
-        let count = UnsafeMutablePointer<UInt32>.alloc(0)
-        let buff = class_copyPropertyList(object_getClass(self), count)
-        let countInt = Int(count[0])
-        let excludeList = self.excludeParameters()
-        for i in 0 ..< countInt {
-            let temp = buff[i]
-            let tempPro = property_getName(temp)
-            guard let proper = String.init(UTF8String: tempPro) else {
-                continue
-            }
-            guard excludeList.contains(proper) == false else {
-                continue
-            }
-            let value: AnyObject? = self.valueForKey(proper)
-            dic[proper] = value
-        }
+        let propertiesList = self.properties()
         
+        var dic:[String: AnyObject] = [:]
+        let excludeList = self.excludeParameters()
+        for (key, value) in propertiesList {
+            guard excludeList.contains(key) == false else {
+                continue
+            }
+            dic[key] = value
+        }
         return dic
     }
-    
+
     public func toSuburiFromParameters() -> String {
         let parameters: [String: AnyObject] = self.toParameters()
         let urlString = NSMutableString()
         for (key, value) in parameters {
-            urlString.appendString(key)
-            urlString.appendString("=")
-            urlString.appendString(String(value))
-            urlString.appendString("&")
+            urlString.append(key)
+            urlString.append("=")
+            urlString.append(String(describing: value))
+            urlString.append("&")
         }
         if urlString.hasSuffix("&") {
-            urlString.deleteCharactersInRange(NSMakeRange(urlString.length - 1, 1))
+            urlString.deleteCharacters(in: NSMakeRange(urlString.length - 1, 1))
         }
-        return urlString.stringByAddingPercentEscapesUsingEncoding(NSUTF8StringEncoding)!
+        return urlString.addingPercentEscapes(using: String.Encoding.utf8.rawValue)!
+    }
+    
+}
+
+
+extension NSObject {
+    
+    func properties(notNull: Bool = true) -> [String: AnyObject] {
+        let mirror = Mirror.init(reflecting: self)
+        
+        var dict:[String: AnyObject] = [:]
+        mirror.eachChild { (child) in
+            if let label = child.label {
+                let value = child.value as AnyObject
+                if value.isKind(of: NSNull.self) && notNull == true { // If
+                    // Empty
+                } else {
+                    dict[label] = value as AnyObject
+                }
+            }
+        }
+        return dict
+    }
+    
+}
+
+extension Mirror {
+    
+    func eachChild(_ iterator: ( (Child) -> Void )) {
+        if let mirror = self.superclassMirror {
+            mirror.eachChild(iterator)
+        }
+        
+        for child in self.children {
+            iterator(child)
+        }
     }
     
 }
